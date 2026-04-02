@@ -24,6 +24,18 @@ For example:
 
 The same pattern works for other object-backed exports, archives, generated artifacts, or application snapshots as long as the source is exposed through an S3-compatible API.
 
+## Versioning and Updates
+
+This template is versioned with tags (e.g. `v1`). Tags are not copied when you use the template — your new repo starts with a clean history.
+
+To track your baseline and pull in future improvements:
+
+- Note the tag you created from (e.g. `v1`) in your repo's README or initial commit message.
+- When a new version is released, diff the tags in this repo to see what changed: compare `v1..v2` on the [releases page](../../releases).
+- Apply any relevant changes manually to your repo.
+
+There is no automatic update mechanism — changes to this template never propagate to repos derived from it.
+
 ## How To Use This Template
 
 1. Create a new repository from this template.
