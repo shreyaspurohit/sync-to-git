@@ -1,0 +1,76 @@
+name: Sync S3-Compatible Storage To Git
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+    inputs:
+      verbose_log:
+        description: "Enable verbose per-object logging"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event_name != 'schedule' || vars.ENABLE_NIGHTLY_SYNC == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SYNC_DIR: ${{ vars.SYNC_DIR || 'data' }}
+      SYNC_MANIFEST_PATH: ${{ vars.SYNC_MANIFEST_PATH || 'manifest.json' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install AWS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install awscli
+
+      - name: Configure S3 credentials
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_REGION: ${{ vars.S3_REGION || secrets.S3_REGION }}
+        run: |
+          aws configure set aws_access_key_id "$S3_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$S3_SECRET_ACCESS_KEY"
+          aws configure set default.region "${S3_REGION:-us-east-1}"
+
+      - name: Sync bucket using manifest
+        env:
+          S3_ENDPOINT_URL: ${{ vars.S3_ENDPOINT_URL || secrets.S3_ENDPOINT_URL }}
+          S3_BUCKET_NAME: ${{ vars.S3_BUCKET_NAME || secrets.S3_BUCKET_NAME }}
+          VERBOSE_LOG: ${{ github.event.inputs.verbose_log || 'false' }}
+          SYNC_DIR: ${{ env.SYNC_DIR }}
+          SYNC_MANIFEST_PATH: ${{ env.SYNC_MANIFEST_PATH }}
+        run: |
+          echo "Starting sync job..."
+          mkdir -p "$SYNC_DIR"
+          python .github/scripts/sync_s3_to_git.py
+          echo "Finished sync job."
+
+      - name: Commit and push if changed
+        env:
+          SYNC_DIR: ${{ env.SYNC_DIR }}
+          SYNC_MANIFEST_PATH: ${{ env.SYNC_MANIFEST_PATH }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SYNC_DIR" "$SYNC_MANIFEST_PATH"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Sync snapshot $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            git push
+          fi
